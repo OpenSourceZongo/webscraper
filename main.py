@@ -11,36 +11,40 @@ def get_domain(url):
     parsed = urlparse(url)
     return parsed.netloc
 
-def scrape_page(url, output_file):
+def scrape_page(url, output_file, max_depth=5, current_depth=0):
     """Scrape a single page and save content"""
+    
+    # FIX 1: Add depth limit
+    if current_depth >= max_depth:
+        return
+    
+    # FIX 2: Check visited URLs BEFORE making the recursive call
     if url in visited_urls:
         return
     
     visited_urls.add(url)
     
     try:
-        print(f"Scraping: {url}")
+        print(f"Scraping: {url} (depth: {current_depth})")
         response = requests.get(url, timeout=5)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Save page content
         with open(output_file, 'a', encoding='utf-8') as f:
             f.write(f"\n\n{'='*80}\n")
             f.write(f"URL: {url}\n")
             f.write(f"{'='*80}\n\n")
             f.write(soup.get_text())
         
-        # Find all links on the page
         for link in soup.find_all('a', href=True):
             next_url = urljoin(url, link['href'])
             
-            # BUG IS HERE: This condition will cause infinite loops
-            # It only checks if the domain matches, but doesn't prevent
-            # revisiting the same URLs or following pagination links endlessly
-            if get_domain(next_url) == base_domain:
-                scrape_page(next_url, output_file)
+            # FIX 3: Add filtering for common problematic URL patterns
+            if (get_domain(next_url) == base_domain and 
+                '#' not in next_url and  # Skip anchor links
+                next_url not in visited_urls):
+                scrape_page(next_url, output_file, max_depth, current_depth + 1)
     
     except requests.RequestException as e:
         print(f"Error scraping {url}: {e}")
